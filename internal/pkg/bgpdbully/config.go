@@ -2,6 +2,7 @@ package bgpdbully
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/spf13/viper"
@@ -34,13 +35,13 @@ func loadConfig(configFile string) *Config {
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
-		fmt.Printf("error: %v", err)
+		log.Printf("error: %v", err)
 		os.Exit(1)
 	}
 
 	config := &Config{}
 	if err := viper.Unmarshal(config); err != nil {
-		fmt.Printf("error: configuration unmarshal error %v", err)
+		log.Printf("error: configuration unmarshal error %v", err)
 		os.Exit(1)
 	}
 
