@@ -1,10 +1,10 @@
 package bgpdbully
 
 import (
-	"fmt"
 	"log"
 	"os"
 
+	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/viper"
 )
 
@@ -41,13 +41,49 @@ func loadConfig(configFile string) *Config {
 
 	config := &Config{}
 	if err := viper.Unmarshal(config); err != nil {
-		log.Printf("error: configuration unmarshal error %v", err)
+		log.Printf("error: %v", err)
 		os.Exit(1)
 	}
 
 	return config
 }
 
-func parseConfig(config *Config) {
-	fmt.Println(config)
+func parseScenariosConfig(config *Config) []Step {
+	var steps []Step
+	for _, v := range config.Scenarios {
+		switch v.Operation {
+		case OPERATION_CONNECT:
+			s := Step{
+				Operation: OPERATION_CONNECT,
+				Parameter: nil,
+			}
+			steps = append(steps, s)
+		case OPERATION_SEND_BGP_OPEN:
+			var params OpenMessageParameters
+			for _, vv := range v.Parameters {
+				var p OpenMessageParameter
+				err := mapstructure.Decode(vv, &p)
+				if err != nil {
+					log.Fatalf("error: %v", err)
+				}
+				params.Parameters = append(params.Parameters, p)
+			}
+			s := Step{
+				Operation: OPERATION_SEND_BGP_OPEN,
+				Parameter: params,
+			}
+			steps = append(steps, s)
+		case OPERATION_RECEIVE_BGP_OPEN:
+		case OPERATION_SEND_BGP_UPDATE:
+		case OPERATION_RECEIVE_BGP_UPDATE:
+		case OPERATION_SEND_BGP_NOTIFICATION:
+		case OPERATION_RECEIVE_BGP_NOTIFICATION:
+		case OPERATION_SEND_BGP_KEEPALIVE:
+		case OPERATION_RECEIVE_BGP_KEEPALIVE:
+		case OPERATION_SEND_BGP_ROUTEREFRESH:
+		case OPERATION_RECEIVE_BGP_ROUTEREFRESH:
+		default:
+		}
+	}
+	return steps
 }
