@@ -1,11 +1,15 @@
 package bgpdbully
 
 import (
+	"bufio"
+	"encoding/binary"
 	"fmt"
 	"log"
 	"net"
 	"os"
 	"time"
+
+	"github.com/osrg/gobgp/pkg/packet/bgp"
 )
 
 const (
@@ -44,23 +48,81 @@ type OpenMessageParameter struct {
 	Data    string `mapstructure:"data"`
 }
 
-func connect(globalConfig *Global) net.Conn {
+func connect(globalConfig *Global) *net.Conn {
 	conn, err := net.Dial("tcp", fmt.Sprintf("[%s]:%d", globalConfig.PeerIP, globalConfig.PeerPort))
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
 
 	log.Printf("connecting to %v", conn.RemoteAddr())
-	return conn
+	return &conn
 }
 
-func processSteps(config *Config, steps []Step) {
+func splitBGP(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if atEOF && len(data) == 0 || len(data) < bgp.BGP_HEADER_LENGTH {
+		return 0, nil, nil
+	}
+
+	totalLen := binary.BigEndian.Uint16(data[16:18])
+	if totalLen < bgp.BGP_HEADER_LENGTH {
+		return 0, nil, fmt.Errorf("BGP Message length is too short: %d", totalLen)
+	}
+	if uint16(len(data)) < totalLen {
+		return 0, nil, nil
+	}
+	return int(totalLen), data[0:totalLen], nil
+}
+
+func receiveBGPMessage(conn *net.Conn, bgpMsgCh chan *bgp.BGPMessage, closeCh chan struct{}) {
+	scanner := bufio.NewScanner(bufio.NewReader((*conn)))
+	scanner.Split(splitBGP)
+
+	for scanner.Scan() {
+		bgpMsg, err := bgp.ParseBGPMessage(scanner.Bytes())
+		if err != nil {
+			log.Printf("error: %v", err)
+			continue
+		}
+
+		bgpMsgCh <- bgpMsg
+	}
+}
+
+func sendBGPOpenMessage(conn *net.Conn, globalConfig *Global, params ParameterInterface) {
+	caps := make([]bgp.ParameterCapabilityInterface, 0)
+
+	for _, v := range params.(OpenMessageParameters).Parameters {
+		cap := bgp.DefaultParameterCapability{
+			CapCode:  bgp.BGPCapabilityCode(v.Capcode),
+			CapLen:   uint8(len(v.Data)),
+			CapValue: []byte(v.Data),
+		}
+		caps = append(caps, &cap)
+	}
+	opt := bgp.NewOptionParameterCapability(caps)
+	msg := bgp.NewBGPOpenMessage((*globalConfig).LocalAS, (*globalConfig).Holdtime, (*globalConfig).LocalID, []bgp.OptionParameterInterface{opt})
+	data, err := msg.Serialize()
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	(*conn).Write(data)
+	time.Sleep(60 * time.Second)
+	fmt.Printf(" >>> sent OPEN: %#v\n", msg.Body)
+}
+
+func processSteps(config *Config, steps []Step, bgpMsgCh chan *bgp.BGPMessage, closeCh chan struct{}) {
+	var conn *net.Conn
+
 	for _, v := range steps {
 		switch v.Operation {
 		case OPERATION_CONNECT:
-			connect(&((*config).Global))
+			conn = connect(&((*config).Global))
+			go receiveBGPMessage(conn, bgpMsgCh, closeCh)
+		case OPERATION_SEND_BGP_OPEN:
+			log.Printf("send BGP Open Message")
+			sendBGPOpenMessage(conn, &((*config).Global), v.Parameter)
 		default:
-			time.Sleep(10 * time.Second) // will be deleted
+			time.Sleep(60 * time.Second) // will be deleted
 			log.Printf("no such operation, exit")
 			os.Exit(1)
 		}
@@ -72,10 +134,9 @@ func Run(configFile *string) {
 
 	config := loadConfig(*configFile)
 	steps := parseScenariosConfig(config)
-	//var conn net.Conn
 
-	//bgpMsgCh := make(chan *bgp.BGPMessage)
-	//closeCh := make(chan struct{})
+	bgpMsgCh := make(chan *bgp.BGPMessage)
+	closeCh := make(chan struct{})
 
-	processSteps(config, steps)
+	processSteps(config, steps, bgpMsgCh, closeCh)
 }

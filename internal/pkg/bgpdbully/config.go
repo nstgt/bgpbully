@@ -16,8 +16,8 @@ type Config struct {
 type Global struct {
 	PeerIP   string `mapstructure:"peer_ip"`
 	PeerPort int    `mapstructure:"peer_port"`
-	Holdtime int    `mapstructure:"holdtime"`
-	LocalAS  int32  `mapstructure:"local_as"`
+	Holdtime uint16 `mapstructure:"holdtime"`
+	LocalAS  uint16 `mapstructure:"local_as"`
 	LocalID  string `mapstructure:"local_id"`
 }
 
