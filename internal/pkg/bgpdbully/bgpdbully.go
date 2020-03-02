@@ -3,6 +3,7 @@ package bgpdbully
 import (
 	"bufio"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"net"
@@ -92,10 +93,11 @@ func sendBGPOpenMessage(conn *net.Conn, globalConfig *Global, params ParameterIn
 	caps := make([]bgp.ParameterCapabilityInterface, 0)
 
 	for _, v := range params.(OpenMessageParameters).Parameters {
+		data, _ := hex.DecodeString(v.Data)
 		cap := bgp.DefaultParameterCapability{
 			CapCode:  bgp.BGPCapabilityCode(v.Capcode),
-			CapLen:   uint8(len(v.Data)),
-			CapValue: []byte(v.Data),
+			CapLen:   uint8(len(data)),
+			CapValue: data,
 		}
 		caps = append(caps, &cap)
 	}
