@@ -15,6 +15,7 @@ import (
 
 const (
 	OPERATION_CONNECT                  = "connect"
+	OPERATION_SLEEP                    = "sleep"
 	OPERATION_SEND_BGP_OPEN            = "send_bgp_open"
 	OPERATION_SEND_BGP_UPDATE          = "send_bgp_update"
 	OPERATION_SEND_BGP_NOTIFICATION    = "send_bgp_notification"
@@ -47,6 +48,13 @@ type OpenMessageParameter struct {
 	Type    string `mapstructure:"type"`
 	Capcode int    `mapstructure:"capcode"`
 	Data    string `mapstructure:"data"`
+}
+
+type SleepParameter struct {
+	Duration time.Duration `mapstructure:"sec"`
+}
+
+func (p SleepParameter) Serialize() {
 }
 
 func connect(globalConfig *Global) *net.Conn {
@@ -90,6 +98,7 @@ func receiveBGPMessage(conn *net.Conn, bgpMsgCh chan *bgp.BGPMessage, closeCh ch
 }
 
 func sendBGPOpenMessage(conn *net.Conn, globalConfig *Global, params ParameterInterface) {
+	log.Printf("send BGP Open Message")
 	caps := make([]bgp.ParameterCapabilityInterface, 0)
 
 	for _, v := range params.(OpenMessageParameters).Parameters {
@@ -108,8 +117,19 @@ func sendBGPOpenMessage(conn *net.Conn, globalConfig *Global, params ParameterIn
 		log.Fatalf("%v", err)
 	}
 	(*conn).Write(data)
-	time.Sleep(60 * time.Second)
-	fmt.Printf(" >>> sent OPEN: %#v\n", msg.Body)
+}
+
+func sendBGPKeepaliveMessage(conn *net.Conn) {
+	log.Printf("send BGP Keepalive Message")
+	msg := bgp.NewBGPKeepAliveMessage()
+	data, _ := msg.Serialize()
+	(*conn).Write(data)
+}
+
+func sleep(param ParameterInterface) {
+	d := param.(SleepParameter).Duration
+	log.Printf("sleep %v sec", int64(d))
+	time.Sleep(d * time.Second)
 }
 
 func processSteps(config *Config, steps []Step, bgpMsgCh chan *bgp.BGPMessage, closeCh chan struct{}) {
@@ -121,8 +141,11 @@ func processSteps(config *Config, steps []Step, bgpMsgCh chan *bgp.BGPMessage, c
 			conn = connect(&((*config).Global))
 			go receiveBGPMessage(conn, bgpMsgCh, closeCh)
 		case OPERATION_SEND_BGP_OPEN:
-			log.Printf("send BGP Open Message")
 			sendBGPOpenMessage(conn, &((*config).Global), v.Parameter)
+		case OPERATION_SEND_BGP_KEEPALIVE:
+			sendBGPKeepaliveMessage(conn)
+		case OPERATION_SLEEP:
+			sleep(v.Parameter)
 		default:
 			time.Sleep(60 * time.Second) // will be deleted
 			log.Printf("no such operation, exit")

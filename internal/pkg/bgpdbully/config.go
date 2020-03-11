@@ -79,9 +79,25 @@ func parseScenariosConfig(config *Config) []Step {
 		case OPERATION_SEND_BGP_NOTIFICATION:
 		case OPERATION_RECEIVE_BGP_NOTIFICATION:
 		case OPERATION_SEND_BGP_KEEPALIVE:
+			s := Step{
+				Operation: OPERATION_SEND_BGP_KEEPALIVE,
+				Parameter: nil,
+			}
+			steps = append(steps, s)
 		case OPERATION_RECEIVE_BGP_KEEPALIVE:
 		case OPERATION_SEND_BGP_ROUTEREFRESH:
 		case OPERATION_RECEIVE_BGP_ROUTEREFRESH:
+		case OPERATION_SLEEP:
+			var p SleepParameter
+			err := mapstructure.Decode(v.Parameters[0], &p)
+			if err != nil {
+				log.Fatalf("error: %v", err)
+			}
+			s := Step{
+				Operation: OPERATION_SLEEP,
+				Parameter: p,
+			}
+			steps = append(steps, s)
 		default:
 		}
 	}
