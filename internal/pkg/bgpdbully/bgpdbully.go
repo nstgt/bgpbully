@@ -96,7 +96,7 @@ func splitBGP(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	return int(totalLen), data[0:totalLen], nil
 }
 
-func receiveBGPMessage(conn *net.Conn, bgpMsgCh chan *bgp.BGPMessage, closeCh chan struct{}) {
+func acceptArrivalBGPMessage(conn *net.Conn, bgpMsgCh chan *bgp.BGPMessage, closeCh chan struct{}) {
 	scanner := bufio.NewScanner(bufio.NewReader((*conn)))
 	scanner.Split(splitBGP)
 
@@ -108,6 +108,17 @@ func receiveBGPMessage(conn *net.Conn, bgpMsgCh chan *bgp.BGPMessage, closeCh ch
 		}
 
 		bgpMsgCh <- bgpMsg
+	}
+}
+
+func receiveBGPMessage(bgpMsgCh chan *bgp.BGPMessage, expectedMsgType uint8) {
+	bgpMsg := <-bgpMsgCh
+
+	if bgpMsg.Header.Type == expectedMsgType {
+		log.Printf("receive BGP Message, type %v", expectedMsgType)
+	} else {
+		log.Printf("error: expected type %v, got type %v", expectedMsgType, bgpMsg.Header.Type)
+		os.Exit(1)
 	}
 }
 
@@ -164,7 +175,7 @@ func processSteps(config *Config, steps []Step, bgpMsgCh chan *bgp.BGPMessage, c
 		switch v.Operation {
 		case OPERATION_CONNECT:
 			conn = connect(&((*config).Global))
-			go receiveBGPMessage(conn, bgpMsgCh, closeCh)
+			go acceptArrivalBGPMessage(conn, bgpMsgCh, closeCh)
 		case OPERATION_CLOSE:
 			close(conn)
 		case OPERATION_SEND_BGP_OPEN:
@@ -173,6 +184,16 @@ func processSteps(config *Config, steps []Step, bgpMsgCh chan *bgp.BGPMessage, c
 			sendBGPNotificationMessage(conn, v.Parameter)
 		case OPERATION_SEND_BGP_KEEPALIVE:
 			sendBGPKeepaliveMessage(conn)
+		case OPERATION_RECEIVE_BGP_OPEN:
+			receiveBGPMessage(bgpMsgCh, bgp.BGP_MSG_OPEN)
+		case OPERATION_RECEIVE_BGP_UPDATE:
+			receiveBGPMessage(bgpMsgCh, bgp.BGP_MSG_UPDATE)
+		case OPERATION_RECEIVE_BGP_NOTIFICATION:
+			receiveBGPMessage(bgpMsgCh, bgp.BGP_MSG_NOTIFICATION)
+		case OPERATION_RECEIVE_BGP_KEEPALIVE:
+			receiveBGPMessage(bgpMsgCh, bgp.BGP_MSG_KEEPALIVE)
+		case OPERATION_RECEIVE_BGP_ROUTEREFRESH:
+			receiveBGPMessage(bgpMsgCh, bgp.BGP_MSG_ROUTE_REFRESH)
 		case OPERATION_SLEEP:
 			sleep(v.Parameter)
 		default:

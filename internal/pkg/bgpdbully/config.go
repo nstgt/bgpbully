@@ -79,9 +79,7 @@ func parseScenariosConfig(config *Config) []Step {
 				Parameter: params,
 			}
 			steps = append(steps, s)
-		case OPERATION_RECEIVE_BGP_OPEN:
 		case OPERATION_SEND_BGP_UPDATE:
-		case OPERATION_RECEIVE_BGP_UPDATE:
 		case OPERATION_SEND_BGP_NOTIFICATION:
 			var p NotificationMessageParameter
 			err := mapstructure.Decode(v.Parameters[0], &p)
@@ -93,16 +91,43 @@ func parseScenariosConfig(config *Config) []Step {
 				Parameter: p,
 			}
 			steps = append(steps, s)
-		case OPERATION_RECEIVE_BGP_NOTIFICATION:
 		case OPERATION_SEND_BGP_KEEPALIVE:
 			s := Step{
 				Operation: OPERATION_SEND_BGP_KEEPALIVE,
 				Parameter: nil,
 			}
 			steps = append(steps, s)
-		case OPERATION_RECEIVE_BGP_KEEPALIVE:
 		case OPERATION_SEND_BGP_ROUTEREFRESH:
+		case OPERATION_RECEIVE_BGP_OPEN:
+			s := Step{
+				Operation: OPERATION_RECEIVE_BGP_OPEN,
+				Parameter: nil,
+			}
+			steps = append(steps, s)
+		case OPERATION_RECEIVE_BGP_UPDATE:
+			s := Step{
+				Operation: OPERATION_RECEIVE_BGP_UPDATE,
+				Parameter: nil,
+			}
+			steps = append(steps, s)
+		case OPERATION_RECEIVE_BGP_NOTIFICATION:
+			s := Step{
+				Operation: OPERATION_RECEIVE_BGP_NOTIFICATION,
+				Parameter: nil,
+			}
+			steps = append(steps, s)
+		case OPERATION_RECEIVE_BGP_KEEPALIVE:
+			s := Step{
+				Operation: OPERATION_RECEIVE_BGP_KEEPALIVE,
+				Parameter: nil,
+			}
+			steps = append(steps, s)
 		case OPERATION_RECEIVE_BGP_ROUTEREFRESH:
+			s := Step{
+				Operation: OPERATION_RECEIVE_BGP_ROUTEREFRESH,
+				Parameter: nil,
+			}
+			steps = append(steps, s)
 		case OPERATION_SLEEP:
 			var p SleepParameter
 			err := mapstructure.Decode(v.Parameters[0], &p)
@@ -115,6 +140,8 @@ func parseScenariosConfig(config *Config) []Step {
 			}
 			steps = append(steps, s)
 		default:
+			log.Fatalf("error: no such operation %v", v.Operation)
+			os.Exit(1)
 		}
 	}
 	return steps
