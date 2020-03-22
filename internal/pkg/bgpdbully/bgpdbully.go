@@ -16,6 +16,7 @@ import (
 const (
 	OPERATION_CONNECT                  = "connect"
 	OPERATION_SLEEP                    = "sleep"
+	OPERATION_CLOSE                    = "close"
 	OPERATION_SEND_BGP_OPEN            = "send_bgp_open"
 	OPERATION_SEND_BGP_UPDATE          = "send_bgp_update"
 	OPERATION_SEND_BGP_NOTIFICATION    = "send_bgp_notification"
@@ -50,6 +51,14 @@ type OpenMessageParameter struct {
 	Data    string `mapstructure:"data"`
 }
 
+type NotificationMessageParameter struct {
+	Code    uint8 `mapstructure:"code"`
+	SubCode uint8 `mapstructure:"subcode"`
+}
+
+func (p NotificationMessageParameter) Serialize() {
+}
+
 type SleepParameter struct {
 	Duration time.Duration `mapstructure:"sec"`
 }
@@ -65,6 +74,11 @@ func connect(globalConfig *Global) *net.Conn {
 
 	log.Printf("connecting to %v", conn.RemoteAddr())
 	return &conn
+}
+
+func close(conn *net.Conn) {
+	log.Printf("closing connection to %v", (*conn).RemoteAddr())
+	(*conn).Close()
 }
 
 func splitBGP(data []byte, atEOF bool) (advance int, token []byte, err error) {
@@ -119,6 +133,17 @@ func sendBGPOpenMessage(conn *net.Conn, globalConfig *Global, params ParameterIn
 	(*conn).Write(data)
 }
 
+func sendBGPNotificationMessage(conn *net.Conn, param ParameterInterface) {
+	log.Printf("send BGP Notification Message")
+	p := param.(NotificationMessageParameter)
+	msg := bgp.NewBGPNotificationMessage(p.Code, p.SubCode, nil)
+	data, err := msg.Serialize()
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	(*conn).Write(data)
+}
+
 func sendBGPKeepaliveMessage(conn *net.Conn) {
 	log.Printf("send BGP Keepalive Message")
 	msg := bgp.NewBGPKeepAliveMessage()
@@ -140,14 +165,17 @@ func processSteps(config *Config, steps []Step, bgpMsgCh chan *bgp.BGPMessage, c
 		case OPERATION_CONNECT:
 			conn = connect(&((*config).Global))
 			go receiveBGPMessage(conn, bgpMsgCh, closeCh)
+		case OPERATION_CLOSE:
+			close(conn)
 		case OPERATION_SEND_BGP_OPEN:
 			sendBGPOpenMessage(conn, &((*config).Global), v.Parameter)
+		case OPERATION_SEND_BGP_NOTIFICATION:
+			sendBGPNotificationMessage(conn, v.Parameter)
 		case OPERATION_SEND_BGP_KEEPALIVE:
 			sendBGPKeepaliveMessage(conn)
 		case OPERATION_SLEEP:
 			sleep(v.Parameter)
 		default:
-			time.Sleep(60 * time.Second) // will be deleted
 			log.Printf("no such operation, exit")
 			os.Exit(1)
 		}

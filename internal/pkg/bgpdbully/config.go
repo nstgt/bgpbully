@@ -58,6 +58,12 @@ func parseScenariosConfig(config *Config) []Step {
 				Parameter: nil,
 			}
 			steps = append(steps, s)
+		case OPERATION_CLOSE:
+			s := Step{
+				Operation: OPERATION_CLOSE,
+				Parameter: nil,
+			}
+			steps = append(steps, s)
 		case OPERATION_SEND_BGP_OPEN:
 			var params OpenMessageParameters
 			for _, vv := range v.Parameters {
@@ -77,6 +83,16 @@ func parseScenariosConfig(config *Config) []Step {
 		case OPERATION_SEND_BGP_UPDATE:
 		case OPERATION_RECEIVE_BGP_UPDATE:
 		case OPERATION_SEND_BGP_NOTIFICATION:
+			var p NotificationMessageParameter
+			err := mapstructure.Decode(v.Parameters[0], &p)
+			if err != nil {
+				log.Fatalf("error: %v", err)
+			}
+			s := Step{
+				Operation: OPERATION_SEND_BGP_NOTIFICATION,
+				Parameter: p,
+			}
+			steps = append(steps, s)
 		case OPERATION_RECEIVE_BGP_NOTIFICATION:
 		case OPERATION_SEND_BGP_KEEPALIVE:
 			s := Step{
