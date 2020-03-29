@@ -8,6 +8,8 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/osrg/gobgp/pkg/packet/bgp"
@@ -51,6 +53,22 @@ type OpenMessageParameter struct {
 	Data    string `mapstructure:"data"`
 }
 
+type UpdateMessageParameter struct {
+	WithdrawnRoutes []string        `mapstructure:"withdrawn_routes"`
+	PathAttributes  []PathAttribute `mapstructure:"path_attributes"`
+	NLRI            []string        `mapstructure:"nlri"`
+}
+
+type PathAttribute struct {
+	Flag   string `mapstructure:"flag"`
+	Type   uint8  `mapstructure:"type"`
+	Length uint16 `mapstructure:"len"`
+	Data   string `mapstructure:"data"`
+}
+
+func (p UpdateMessageParameter) Serialize() {
+}
+
 type NotificationMessageParameter struct {
 	Code    uint8 `mapstructure:"code"`
 	SubCode uint8 `mapstructure:"subcode"`
@@ -59,11 +77,24 @@ type NotificationMessageParameter struct {
 func (p NotificationMessageParameter) Serialize() {
 }
 
+type RouterefreshMessageParameter struct {
+	AFI  uint16 `mapstructure:"afi"`
+	SAFI uint8  `mapstructure:"safi"`
+}
+
+func (p RouterefreshMessageParameter) Serialize() {
+}
+
 type SleepParameter struct {
 	Duration time.Duration `mapstructure:"sec"`
 }
 
 func (p SleepParameter) Serialize() {
+}
+
+type IPAddrPrefix struct {
+	bgp.IPAddrPrefixDefault
+	addrlen uint8
 }
 
 func connect(globalConfig *Global) *net.Conn {
@@ -144,6 +175,55 @@ func sendBGPOpenMessage(conn *net.Conn, globalConfig *Global, params ParameterIn
 	(*conn).Write(data)
 }
 
+func sendBGPUpdateMessage(conn *net.Conn, param ParameterInterface) {
+	log.Printf("send BGP Update Message")
+
+	p := param.(UpdateMessageParameter)
+
+	var withdrawnRoutes []*bgp.IPAddrPrefix
+	for _, v := range p.WithdrawnRoutes {
+		i := convertIPfromStringToIPAddrPrefix(v)
+		withdrawnRoutes = append(withdrawnRoutes, i)
+	}
+
+	var nlri []*bgp.IPAddrPrefix
+	for _, v := range p.NLRI {
+		i := convertIPfromStringToIPAddrPrefix(v)
+		nlri = append(nlri, i)
+	}
+
+	var pathattrs []bgp.PathAttributeInterface
+	for _, v := range p.PathAttributes {
+		flag, _ := strconv.ParseUint(v.Flag, 16, 8)
+		data, _ := hex.DecodeString(v.Data)
+		pa := bgp.NewPathAttributeUnknown(bgp.BGPAttrFlag(uint8(flag)), bgp.BGPAttrType(v.Type), data)
+		pathattrs = append(pathattrs, pa)
+	}
+
+	msg := &bgp.BGPMessage{
+		Header: bgp.BGPHeader{Type: bgp.BGP_MSG_UPDATE},
+		Body: &bgp.BGPUpdate{
+			WithdrawnRoutesLen:    0,
+			WithdrawnRoutes:       withdrawnRoutes,
+			TotalPathAttributeLen: 0,
+			PathAttributes:        pathattrs,
+			NLRI:                  nlri,
+		},
+	}
+	data, err := msg.Serialize()
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	(*conn).Write(data)
+}
+
+func convertIPfromStringToIPAddrPrefix(ip string) *bgp.IPAddrPrefix {
+	addr := strings.Split(ip, "/")[0]
+	len, _ := strconv.ParseUint(strings.Split(ip, "/")[1], 10, 8)
+	ipap := bgp.NewIPAddrPrefix(uint8(len), addr)
+	return ipap
+}
+
 func sendBGPNotificationMessage(conn *net.Conn, param ParameterInterface) {
 	log.Printf("send BGP Notification Message")
 	p := param.(NotificationMessageParameter)
@@ -159,6 +239,17 @@ func sendBGPKeepaliveMessage(conn *net.Conn) {
 	log.Printf("send BGP Keepalive Message")
 	msg := bgp.NewBGPKeepAliveMessage()
 	data, _ := msg.Serialize()
+	(*conn).Write(data)
+}
+
+func sendBGPRouteRefreshMessage(conn *net.Conn, param ParameterInterface) {
+	log.Printf("send BGP RouteRefresh Message")
+	p := param.(RouterefreshMessageParameter)
+	msg := bgp.NewBGPRouteRefreshMessage(p.AFI, 0, p.SAFI)
+	data, err := msg.Serialize()
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
 	(*conn).Write(data)
 }
 
@@ -180,10 +271,14 @@ func processSteps(config *Config, steps []Step, bgpMsgCh chan *bgp.BGPMessage, c
 			close(conn)
 		case OPERATION_SEND_BGP_OPEN:
 			sendBGPOpenMessage(conn, &((*config).Global), v.Parameter)
+		case OPERATION_SEND_BGP_UPDATE:
+			sendBGPUpdateMessage(conn, v.Parameter)
 		case OPERATION_SEND_BGP_NOTIFICATION:
 			sendBGPNotificationMessage(conn, v.Parameter)
 		case OPERATION_SEND_BGP_KEEPALIVE:
 			sendBGPKeepaliveMessage(conn)
+		case OPERATION_SEND_BGP_ROUTEREFRESH:
+			sendBGPRouteRefreshMessage(conn, v.Parameter)
 		case OPERATION_RECEIVE_BGP_OPEN:
 			receiveBGPMessage(bgpMsgCh, bgp.BGP_MSG_OPEN)
 		case OPERATION_RECEIVE_BGP_UPDATE:

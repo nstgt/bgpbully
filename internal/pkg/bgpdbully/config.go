@@ -80,6 +80,16 @@ func parseScenariosConfig(config *Config) []Step {
 			}
 			steps = append(steps, s)
 		case OPERATION_SEND_BGP_UPDATE:
+			var p UpdateMessageParameter
+			err := mapstructure.Decode(v.Parameters[0], &p)
+			if err != nil {
+				log.Fatalf("error: %v", err)
+			}
+			s := Step{
+				Operation: OPERATION_SEND_BGP_UPDATE,
+				Parameter: p,
+			}
+			steps = append(steps, s)
 		case OPERATION_SEND_BGP_NOTIFICATION:
 			var p NotificationMessageParameter
 			err := mapstructure.Decode(v.Parameters[0], &p)
@@ -98,6 +108,16 @@ func parseScenariosConfig(config *Config) []Step {
 			}
 			steps = append(steps, s)
 		case OPERATION_SEND_BGP_ROUTEREFRESH:
+			var p RouterefreshMessageParameter
+			err := mapstructure.Decode(v.Parameters[0], &p)
+			if err != nil {
+				log.Fatalf("error: %v", err)
+			}
+			s := Step{
+				Operation: OPERATION_SEND_BGP_ROUTEREFRESH,
+				Parameter: p,
+			}
+			steps = append(steps, s)
 		case OPERATION_RECEIVE_BGP_OPEN:
 			s := Step{
 				Operation: OPERATION_RECEIVE_BGP_OPEN,
