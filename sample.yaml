@@ -1,0 +1,59 @@
+global:
+  peer_ip:   "127.0.0.1"
+  peer_port: 179
+  holdtime:  90
+  local_as:  65001
+  local_id:  "10.0.0.1"
+scenario:
+- ope: connect
+- ope: send_bgp_open
+  param:
+    capabilities:
+    - type: 1
+      value: "00010001"
+    - type: 2
+      value: ""
+    - type: 65
+      value: "0000fde9"
+- ope: receive_bgp_open
+- ope: send_bgp_keepalive
+- ope: receive_bgp_keepalive
+- ope: send_bgp_update
+  param:
+    nlri:
+    - "10.0.0.0/24"
+    - "10.0.1.0/24"
+    withdrawn_routes: []
+    path_attributes:
+    - flag: "40"
+      type: 1
+      value: "00"
+    - flag: "40"
+      type: 2
+      value: "02010000fde9"
+    - flag: "40"
+      type: 3
+      value: "0a000001"
+- ope: sleep
+  param:
+    sec: 10
+- ope: send_bgp_update
+  param:
+    nlri: []
+    withdrawn_routes:
+    - "10.0.0.0/24"
+- ope: sleep
+  param:
+    sec: 10
+- ope: send_bgp_routerefresh
+  param:
+    afi: 1
+    safi: 1
+- ope: sleep
+  param:
+    sec: 10
+- ope: send_bgp_notification
+  param:
+    code: 1
+    subcode: 1
+- ope: close
