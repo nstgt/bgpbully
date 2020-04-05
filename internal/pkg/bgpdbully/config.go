@@ -9,11 +9,11 @@ import (
 )
 
 type Config struct {
-	Global    Global     `mapstructure:"global"`
-	Scenarios []Scenario `mapstructure:"scenarios"`
+	Global   GlobalConfig `mapstructure:"global"`
+	Scenario []StepConfig `mapstructure:"scenario"`
 }
 
-type Global struct {
+type GlobalConfig struct {
 	PeerIP   string `mapstructure:"peer_ip"`
 	PeerPort int    `mapstructure:"peer_port"`
 	Holdtime uint16 `mapstructure:"holdtime"`
@@ -21,36 +21,44 @@ type Global struct {
 	LocalID  string `mapstructure:"local_id"`
 }
 
-type Scenario struct {
-	Operation  Operation                     `mapstructure:"ope"`
-	Parameters []map[interface{}]interface{} `mapstructure:"param"`
+type StepConfig struct {
+	Operation Operation                   `mapstructure:"ope"`
+	Parameter map[interface{}]interface{} `mapstructure:"param"`
 }
 
 type Operation string
 
-func loadConfig(configFile string) *Config {
-	viper.SetConfigName(configFile)
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")
-	viper.AutomaticEnv()
-
-	if err := viper.ReadInConfig(); err != nil {
-		log.Printf("error: %v", err)
-		os.Exit(1)
-	}
-
+func loadConfig(path string) (*Config, error) {
 	config := &Config{}
-	if err := viper.Unmarshal(config); err != nil {
-		log.Printf("error: %v", err)
-		os.Exit(1)
+	v := viper.New()
+	v.SetConfigFile(path)
+	v.SetConfigType("yaml")
+	var err error
+	if err = v.ReadInConfig(); err != nil {
+		return nil, err
 	}
-
-	return config
+	if err = v.UnmarshalExact(config); err != nil {
+		return nil, err
+	}
+	return config, nil
 }
 
-func parseScenariosConfig(config *Config) []Step {
+func parseGlobal(config *Config) (PeerInfo, LocalInfo) {
+	peer := PeerInfo{
+		IP:   config.Global.PeerIP,
+		Port: config.Global.PeerPort,
+	}
+	local := LocalInfo{
+		Holdtime: config.Global.Holdtime,
+		AS:       config.Global.LocalAS,
+		ID:       config.Global.LocalID,
+	}
+	return peer, local
+}
+
+func parseScenario(config *Config) []Step {
 	var steps []Step
-	for _, v := range config.Scenarios {
+	for _, v := range config.Scenario {
 		switch v.Operation {
 		case OPERATION_CONNECT:
 			s := Step{
@@ -65,23 +73,19 @@ func parseScenariosConfig(config *Config) []Step {
 			}
 			steps = append(steps, s)
 		case OPERATION_SEND_BGP_OPEN:
-			var params OpenMessageParameters
-			for _, vv := range v.Parameters {
-				var p OpenMessageParameter
-				err := mapstructure.Decode(vv, &p)
-				if err != nil {
-					log.Fatalf("error: %v", err)
-				}
-				params.Parameters = append(params.Parameters, p)
+			var p OpenMessageParameter
+			err := mapstructure.Decode(v.Parameter, &p)
+			if err != nil {
+				log.Fatalf("error: %v", err)
 			}
 			s := Step{
 				Operation: OPERATION_SEND_BGP_OPEN,
-				Parameter: params,
+				Parameter: p,
 			}
 			steps = append(steps, s)
 		case OPERATION_SEND_BGP_UPDATE:
 			var p UpdateMessageParameter
-			err := mapstructure.Decode(v.Parameters[0], &p)
+			err := mapstructure.Decode(v.Parameter, &p)
 			if err != nil {
 				log.Fatalf("error: %v", err)
 			}
@@ -92,7 +96,7 @@ func parseScenariosConfig(config *Config) []Step {
 			steps = append(steps, s)
 		case OPERATION_SEND_BGP_NOTIFICATION:
 			var p NotificationMessageParameter
-			err := mapstructure.Decode(v.Parameters[0], &p)
+			err := mapstructure.Decode(v.Parameter, &p)
 			if err != nil {
 				log.Fatalf("error: %v", err)
 			}
@@ -109,7 +113,7 @@ func parseScenariosConfig(config *Config) []Step {
 			steps = append(steps, s)
 		case OPERATION_SEND_BGP_ROUTEREFRESH:
 			var p RouterefreshMessageParameter
-			err := mapstructure.Decode(v.Parameters[0], &p)
+			err := mapstructure.Decode(v.Parameter, &p)
 			if err != nil {
 				log.Fatalf("error: %v", err)
 			}
@@ -150,7 +154,7 @@ func parseScenariosConfig(config *Config) []Step {
 			steps = append(steps, s)
 		case OPERATION_SLEEP:
 			var p SleepParameter
-			err := mapstructure.Decode(v.Parameters[0], &p)
+			err := mapstructure.Decode(v.Parameter, &p)
 			if err != nil {
 				log.Fatalf("error: %v", err)
 			}

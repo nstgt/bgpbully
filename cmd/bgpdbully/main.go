@@ -1,20 +1,21 @@
 package main
 
 import (
-	"flag"
-	"fmt"
 	"os"
 
+	"github.com/jessevdk/go-flags"
 	"github.com/nstgt/bgpdbully/internal/pkg/bgpdbully"
 )
 
 func main() {
-	f := flag.String("f", "", "config file")
-	flag.Parse()
-	if *f == "" {
-		fmt.Println("Usage: bgpdbully -f configfile")
+	var opts struct {
+		ConfigFile string `short:"f" long:"config-file" description:"specifying a config file"`
+	}
+
+	_, err := flags.Parse(&opts)
+	if err != nil {
 		os.Exit(1)
 	}
 
-	bgpdbully.Run(f)
+	bgpdbully.Run(opts.ConfigFile)
 }

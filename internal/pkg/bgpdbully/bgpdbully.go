@@ -31,6 +31,17 @@ const (
 	OPERATION_RECEIVE_BGP_ROUTEREFRESH = "receive_bgp_routerefresh"
 )
 
+type PeerInfo struct {
+	IP   string
+	Port int
+}
+
+type LocalInfo struct {
+	Holdtime uint16
+	AS       uint16
+	ID       string
+}
+
 type Step struct {
 	Operation Operation
 	Parameter ParameterInterface
@@ -40,17 +51,16 @@ type ParameterInterface interface {
 	Serialize()
 }
 
-type OpenMessageParameters struct {
-	Parameters []OpenMessageParameter
-}
-
-func (o OpenMessageParameters) Serialize() {
-}
-
 type OpenMessageParameter struct {
-	Type    string `mapstructure:"type"`
-	Capcode int    `mapstructure:"capcode"`
-	Data    string `mapstructure:"data"`
+	Capabilities []Capability `mapstructure:"capabilities"`
+}
+
+func (o OpenMessageParameter) Serialize() {
+}
+
+type Capability struct {
+	Type  int    `mapstructure:"type"`
+	Value string `mapstructure:"value"`
 }
 
 type UpdateMessageParameter struct {
@@ -63,7 +73,7 @@ type PathAttribute struct {
 	Flag   string `mapstructure:"flag"`
 	Type   uint8  `mapstructure:"type"`
 	Length uint16 `mapstructure:"len"`
-	Data   string `mapstructure:"data"`
+	Value  string `mapstructure:"value"`
 }
 
 func (p UpdateMessageParameter) Serialize() {
@@ -97,8 +107,8 @@ type IPAddrPrefix struct {
 	addrlen uint8
 }
 
-func connect(globalConfig *Global) *net.Conn {
-	conn, err := net.Dial("tcp", fmt.Sprintf("[%s]:%d", globalConfig.PeerIP, globalConfig.PeerPort))
+func connect(peer PeerInfo) *net.Conn {
+	conn, err := net.Dial("tcp", fmt.Sprintf("[%s]:%d", peer.IP, peer.Port))
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
@@ -153,21 +163,21 @@ func receiveBGPMessage(bgpMsgCh chan *bgp.BGPMessage, expectedMsgType uint8) {
 	}
 }
 
-func sendBGPOpenMessage(conn *net.Conn, globalConfig *Global, params ParameterInterface) {
+func sendBGPOpenMessage(conn *net.Conn, local LocalInfo, params ParameterInterface) {
 	log.Printf("send BGP Open Message")
 	caps := make([]bgp.ParameterCapabilityInterface, 0)
 
-	for _, v := range params.(OpenMessageParameters).Parameters {
-		data, _ := hex.DecodeString(v.Data)
+	for _, v := range params.(OpenMessageParameter).Capabilities {
+		data, _ := hex.DecodeString(v.Value)
 		cap := bgp.DefaultParameterCapability{
-			CapCode:  bgp.BGPCapabilityCode(v.Capcode),
+			CapCode:  bgp.BGPCapabilityCode(v.Type),
 			CapLen:   uint8(len(data)),
 			CapValue: data,
 		}
 		caps = append(caps, &cap)
 	}
 	opt := bgp.NewOptionParameterCapability(caps)
-	msg := bgp.NewBGPOpenMessage((*globalConfig).LocalAS, (*globalConfig).Holdtime, (*globalConfig).LocalID, []bgp.OptionParameterInterface{opt})
+	msg := bgp.NewBGPOpenMessage(local.AS, local.Holdtime, local.ID, []bgp.OptionParameterInterface{opt})
 	data, err := msg.Serialize()
 	if err != nil {
 		log.Fatalf("%v", err)
@@ -195,8 +205,8 @@ func sendBGPUpdateMessage(conn *net.Conn, param ParameterInterface) {
 	var pathattrs []bgp.PathAttributeInterface
 	for _, v := range p.PathAttributes {
 		flag, _ := strconv.ParseUint(v.Flag, 16, 8)
-		data, _ := hex.DecodeString(v.Data)
-		pa := bgp.NewPathAttributeUnknown(bgp.BGPAttrFlag(uint8(flag)), bgp.BGPAttrType(v.Type), data)
+		value, _ := hex.DecodeString(v.Value)
+		pa := bgp.NewPathAttributeUnknown(bgp.BGPAttrFlag(uint8(flag)), bgp.BGPAttrType(v.Type), value)
 		pathattrs = append(pathattrs, pa)
 	}
 
@@ -259,18 +269,18 @@ func sleep(param ParameterInterface) {
 	time.Sleep(d * time.Second)
 }
 
-func processSteps(config *Config, steps []Step, bgpMsgCh chan *bgp.BGPMessage, closeCh chan struct{}) {
+func processSteps(peer PeerInfo, local LocalInfo, steps []Step, bgpMsgCh chan *bgp.BGPMessage, closeCh chan struct{}) {
 	var conn *net.Conn
 
 	for _, v := range steps {
 		switch v.Operation {
 		case OPERATION_CONNECT:
-			conn = connect(&((*config).Global))
+			conn = connect(peer)
 			go acceptArrivalBGPMessage(conn, bgpMsgCh, closeCh)
 		case OPERATION_CLOSE:
 			close(conn)
 		case OPERATION_SEND_BGP_OPEN:
-			sendBGPOpenMessage(conn, &((*config).Global), v.Parameter)
+			sendBGPOpenMessage(conn, local, v.Parameter)
 		case OPERATION_SEND_BGP_UPDATE:
 			sendBGPUpdateMessage(conn, v.Parameter)
 		case OPERATION_SEND_BGP_NOTIFICATION:
@@ -298,14 +308,19 @@ func processSteps(config *Config, steps []Step, bgpMsgCh chan *bgp.BGPMessage, c
 	}
 }
 
-func Run(configFile *string) {
+func Run(configFile string) {
 	log.Printf("start")
 
-	config := loadConfig(*configFile)
-	steps := parseScenariosConfig(config)
+	config, err := loadConfig(configFile)
+	if err != nil {
+		log.Fatalf("error: %v", err)
+		os.Exit(1)
+	}
+	peer, local := parseGlobal(config)
+	steps := parseScenario(config)
 
 	bgpMsgCh := make(chan *bgp.BGPMessage)
 	closeCh := make(chan struct{})
 
-	processSteps(config, steps, bgpMsgCh, closeCh)
+	processSteps(peer, local, steps, bgpMsgCh, closeCh)
 }
