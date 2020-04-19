@@ -119,7 +119,22 @@ Refer [IANA: Address Family Numbers](https://www.iana.org/assignments/address-fa
 ### `receive_bgp_*`
 Currently, `receive_bgp_*` operations just validate BGP Message type of receiving BGP packet from the remote BGP speaker.
 
-## Play
+## TODO
+
+There are alot of TODOs.<br>
+I always welcome your feedbacks.
+
+* BGP
+  * MD5
+  * More flexible `receive_*` operation
+  * Invalid length for Capability and Path Attribute
+* Others
+  * Test
+  * Human writable configuration
+* and more
+
+## Try
+Also see [Playground](playground/README.md)
 
 Let's bully [GoBGP](https://github.com/osrg/gobgp).<br>
 You need to install GoBGP. If you don't have, see [here](https://github.com/osrg/gobgp#install).
@@ -134,7 +149,6 @@ router-id = "10.0.0.100"
 [[neighbors]]
   [neighbors.config]
       peer-as = 65001
-      auth-password = "password"
       neighbor-address = "127.0.0.1"
       local-as = 64512
   [neighbors.transport.config]

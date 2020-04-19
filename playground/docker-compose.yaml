@@ -1,0 +1,27 @@
+version: '2'
+services:
+  gobgp:
+    image: nstgt/docker-gobgp
+    container_name: gobgp
+    command: /usr/local/bin/gobgpd -f /root/gobgpd.conf
+    volumes:
+      - ${PWD}/gobgp:/root
+    networks:
+      br01:
+        ipv4_address: 10.0.1.10
+  bgpdbully:
+    image: nstgt/bgpdbully
+    container_name: bgpdbully
+    command: /usr/local/bin/bgpdbully -f /bgpdbully/config.yaml
+    volumes:
+      - ${PWD}/bgpdbully:/bgpdbully
+    networks:
+      br01:
+        ipv4_address: 10.0.1.20
+networks:
+  br01:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.0.1.0/24
