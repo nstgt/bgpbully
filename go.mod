@@ -1,4 +1,4 @@
-module github.com/nstgt/bgpdbully
+module github.com/nstgt/bgpbully
 
 go 1.13
 

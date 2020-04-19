@@ -1,12 +1,12 @@
-# bgpdbully
+# bgpbully
 
-bgpdbully is a test tool for BGP.<br>
+bgpbully is a test tool for BGP.<br>
 It receives and sends BGP packets according to YAML syntax scenario, even if they are malformed.
 
 ## Install
 
 ```
-$ go get github.com/nstgt/bgpdbully/cmd/bgpdbully
+$ go get github.com/nstgt/bgpbully/cmd/bgpbully
 ```
 
 ## Execution
@@ -14,7 +14,7 @@ $ go get github.com/nstgt/bgpdbully/cmd/bgpdbully
 Write config file and run with it.
 
 ```
-$ bgpdbully -f sample.yaml
+$ bgpbully -f sample.yaml
 ```
 
 ## Configuration
@@ -32,7 +32,7 @@ global:
   local_id:  "10.0.0.1"   # local router ID in string
 ```
 
-In the `scenario` part, you can decide the BGP behavior of bgpdbully by using instructions composed of operation (`ope`) and its parameter (`param`, if needed).
+In the `scenario` part, you can decide the BGP behavior of bgpbully by using instructions composed of operation (`ope`) and its parameter (`param`, if needed).
 
 ```
 scenario:
@@ -160,10 +160,10 @@ $ gobgpd -f gobgpd.conf
 ...
 ```
 
-Run bgpdbully using [sample config](sample.yaml).
+Run bgpbully using [sample config](sample.yaml).
 
 ```
-$ bgpdbully -f sample.yaml
+$ bgpbully -f sample.yaml
 2020/04/05 22:24:00 start
 2020/04/05 22:24:00 connecting to 127.0.0.1:179
 2020/04/05 22:24:00 send BGP Open Message
@@ -180,7 +180,7 @@ $ bgpdbully -f sample.yaml
 2020/04/05 22:24:30 closing connection to 127.0.0.1:179
 ```
 
-You'll see GoBGP establish BGP peer with bgpdbully, and receive routes from it.
+You'll see GoBGP establish BGP peer with bgpbully, and receive routes from it.
 
 ```
 $ gobgp neighbor

@@ -9,12 +9,12 @@ services:
     networks:
       br01:
         ipv4_address: 10.0.1.10
-  bgpdbully:
-    image: nstgt/bgpdbully
-    container_name: bgpdbully
-    command: /usr/local/bin/bgpdbully -f /bgpdbully/config.yaml
+  bgpbully:
+    image: nstgt/bgpbully
+    container_name: bgpbully
+    command: /usr/local/bin/bgpbully -f /bgpbully/config.yaml
     volumes:
-      - ${PWD}/bgpdbully:/bgpdbully
+      - ${PWD}/bgpbully:/bgpbully
     networks:
       br01:
         ipv4_address: 10.0.1.20

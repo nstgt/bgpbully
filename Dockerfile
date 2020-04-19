@@ -5,12 +5,12 @@ COPY go.mod go.sum /root/
 COPY cmd/ /root/cmd/
 COPY internal/ /root/internal/
 RUN go mod download \
-    && cd cmd/bgpdbully \
+    && cd cmd/bgpbully \
     && go install
 
 FROM debian:10.3
 RUN apt update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-RUN mkdir -p /bgpdbully
-COPY --from=builder /go/bin/bgpdbully /usr/local/bin/
+RUN mkdir -p /bgpbully
+COPY --from=builder /go/bin/bgpbully /usr/local/bin/

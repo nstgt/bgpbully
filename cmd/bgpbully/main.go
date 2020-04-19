@@ -4,7 +4,7 @@ import (
 	"os"
 
 	"github.com/jessevdk/go-flags"
-	"github.com/nstgt/bgpdbully/internal/pkg/bgpdbully"
+	"github.com/nstgt/bgpbully/internal/pkg/bgpbully"
 )
 
 func main() {
@@ -17,5 +17,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	bgpdbully.Run(opts.ConfigFile)
+	bgpbully.Run(opts.ConfigFile)
 }

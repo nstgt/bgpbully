@@ -1,4 +1,4 @@
-package bgpdbully
+package bgpbully
 
 import (
 	"log"

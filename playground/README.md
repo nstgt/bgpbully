@@ -1,5 +1,5 @@
 # Playground
-Running bgpdbully with GoBGP in docker-compose environment.
+Running bgpbully with GoBGP in docker-compose environment.
 
 ## Play
 
@@ -11,7 +11,7 @@ $ docker exec gobgp gobgp neighbor
 Peer         AS  Up/Down State       |#Received  Accepted
 10.0.1.20 65001 00:00:02 Establ      |        2         2
 
-$ docker logs bgpdbully
+$ docker logs bgpbully
 2020/04/19 05:33:11 start
 2020/04/19 05:33:11 sleep 3 sec
 2020/04/19 05:33:14 connecting to 10.0.1.10:179
