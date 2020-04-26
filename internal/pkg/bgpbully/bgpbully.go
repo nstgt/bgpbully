@@ -48,19 +48,36 @@ type Step struct {
 }
 
 type ParameterInterface interface {
-	Serialize()
+	Serialize() ([]byte, error)
 }
 
 type OpenMessageParameter struct {
+	AS           uint16
+	Holdtime     uint16
+	ID           string
 	Capabilities []Capability `mapstructure:"capabilities"`
-}
-
-func (o OpenMessageParameter) Serialize() {
 }
 
 type Capability struct {
 	Type  int    `mapstructure:"type"`
 	Value string `mapstructure:"value"`
+}
+
+func (p OpenMessageParameter) Serialize() ([]byte, error) {
+	caps := make([]bgp.ParameterCapabilityInterface, 0)
+	for _, v := range p.Capabilities {
+		data, _ := hex.DecodeString(v.Value)
+		cap := bgp.DefaultParameterCapability{
+			CapCode:  bgp.BGPCapabilityCode(v.Type),
+			CapLen:   uint8(len(data)),
+			CapValue: data,
+		}
+		caps = append(caps, &cap)
+	}
+	opt := bgp.NewOptionParameterCapability(caps)
+	msg := bgp.NewBGPOpenMessage(p.AS, p.Holdtime, p.ID, []bgp.OptionParameterInterface{opt})
+	data, err := msg.Serialize()
+	return data, err
 }
 
 type UpdateMessageParameter struct {
@@ -76,7 +93,39 @@ type PathAttribute struct {
 	Value  string `mapstructure:"value"`
 }
 
-func (p UpdateMessageParameter) Serialize() {
+func (p UpdateMessageParameter) Serialize() ([]byte, error) {
+	var withdrawnRoutes []*bgp.IPAddrPrefix
+	for _, v := range p.WithdrawnRoutes {
+		i := convertIPfromStringToIPAddrPrefix(v)
+		withdrawnRoutes = append(withdrawnRoutes, i)
+	}
+
+	var nlri []*bgp.IPAddrPrefix
+	for _, v := range p.NLRI {
+		i := convertIPfromStringToIPAddrPrefix(v)
+		nlri = append(nlri, i)
+	}
+
+	var pathattrs []bgp.PathAttributeInterface
+	for _, v := range p.PathAttributes {
+		flag, _ := strconv.ParseUint(v.Flag, 16, 8)
+		value, _ := hex.DecodeString(v.Value)
+		pa := bgp.NewPathAttributeUnknown(bgp.BGPAttrFlag(uint8(flag)), bgp.BGPAttrType(v.Type), value)
+		pathattrs = append(pathattrs, pa)
+	}
+
+	msg := &bgp.BGPMessage{
+		Header: bgp.BGPHeader{Type: bgp.BGP_MSG_UPDATE},
+		Body: &bgp.BGPUpdate{
+			WithdrawnRoutesLen:    0,
+			WithdrawnRoutes:       withdrawnRoutes,
+			TotalPathAttributeLen: 0,
+			PathAttributes:        pathattrs,
+			NLRI:                  nlri,
+		},
+	}
+	data, err := msg.Serialize()
+	return data, err
 }
 
 type NotificationMessageParameter struct {
@@ -84,7 +133,10 @@ type NotificationMessageParameter struct {
 	SubCode uint8 `mapstructure:"subcode"`
 }
 
-func (p NotificationMessageParameter) Serialize() {
+func (p NotificationMessageParameter) Serialize() ([]byte, error) {
+	msg := bgp.NewBGPNotificationMessage(p.Code, p.SubCode, nil)
+	data, err := msg.Serialize()
+	return data, err
 }
 
 type RouterefreshMessageParameter struct {
@@ -92,14 +144,21 @@ type RouterefreshMessageParameter struct {
 	SAFI uint8  `mapstructure:"safi"`
 }
 
-func (p RouterefreshMessageParameter) Serialize() {
+func (p RouterefreshMessageParameter) Serialize() ([]byte, error) {
+	msg := bgp.NewBGPRouteRefreshMessage(p.AFI, 0, p.SAFI)
+	data, err := msg.Serialize()
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	return data, err
 }
 
 type SleepParameter struct {
 	Duration time.Duration `mapstructure:"sec"`
 }
 
-func (p SleepParameter) Serialize() {
+func (p SleepParameter) Serialize() ([]byte, error) {
+	return nil, nil
 }
 
 type IPAddrPrefix struct {
@@ -163,22 +222,9 @@ func receiveBGPMessage(bgpMsgCh chan *bgp.BGPMessage, expectedMsgType uint8) {
 	}
 }
 
-func sendBGPOpenMessage(conn *net.Conn, local LocalInfo, params ParameterInterface) {
+func sendBGPOpenMessage(conn *net.Conn, param ParameterInterface) {
 	log.Printf("send BGP Open Message")
-	caps := make([]bgp.ParameterCapabilityInterface, 0)
-
-	for _, v := range params.(OpenMessageParameter).Capabilities {
-		data, _ := hex.DecodeString(v.Value)
-		cap := bgp.DefaultParameterCapability{
-			CapCode:  bgp.BGPCapabilityCode(v.Type),
-			CapLen:   uint8(len(data)),
-			CapValue: data,
-		}
-		caps = append(caps, &cap)
-	}
-	opt := bgp.NewOptionParameterCapability(caps)
-	msg := bgp.NewBGPOpenMessage(local.AS, local.Holdtime, local.ID, []bgp.OptionParameterInterface{opt})
-	data, err := msg.Serialize()
+	data, err := param.(OpenMessageParameter).Serialize()
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
@@ -187,58 +233,16 @@ func sendBGPOpenMessage(conn *net.Conn, local LocalInfo, params ParameterInterfa
 
 func sendBGPUpdateMessage(conn *net.Conn, param ParameterInterface) {
 	log.Printf("send BGP Update Message")
-
-	p := param.(UpdateMessageParameter)
-
-	var withdrawnRoutes []*bgp.IPAddrPrefix
-	for _, v := range p.WithdrawnRoutes {
-		i := convertIPfromStringToIPAddrPrefix(v)
-		withdrawnRoutes = append(withdrawnRoutes, i)
-	}
-
-	var nlri []*bgp.IPAddrPrefix
-	for _, v := range p.NLRI {
-		i := convertIPfromStringToIPAddrPrefix(v)
-		nlri = append(nlri, i)
-	}
-
-	var pathattrs []bgp.PathAttributeInterface
-	for _, v := range p.PathAttributes {
-		flag, _ := strconv.ParseUint(v.Flag, 16, 8)
-		value, _ := hex.DecodeString(v.Value)
-		pa := bgp.NewPathAttributeUnknown(bgp.BGPAttrFlag(uint8(flag)), bgp.BGPAttrType(v.Type), value)
-		pathattrs = append(pathattrs, pa)
-	}
-
-	msg := &bgp.BGPMessage{
-		Header: bgp.BGPHeader{Type: bgp.BGP_MSG_UPDATE},
-		Body: &bgp.BGPUpdate{
-			WithdrawnRoutesLen:    0,
-			WithdrawnRoutes:       withdrawnRoutes,
-			TotalPathAttributeLen: 0,
-			PathAttributes:        pathattrs,
-			NLRI:                  nlri,
-		},
-	}
-	data, err := msg.Serialize()
+	data, err := param.(UpdateMessageParameter).Serialize()
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
 	(*conn).Write(data)
 }
 
-func convertIPfromStringToIPAddrPrefix(ip string) *bgp.IPAddrPrefix {
-	addr := strings.Split(ip, "/")[0]
-	len, _ := strconv.ParseUint(strings.Split(ip, "/")[1], 10, 8)
-	ipap := bgp.NewIPAddrPrefix(uint8(len), addr)
-	return ipap
-}
-
 func sendBGPNotificationMessage(conn *net.Conn, param ParameterInterface) {
 	log.Printf("send BGP Notification Message")
-	p := param.(NotificationMessageParameter)
-	msg := bgp.NewBGPNotificationMessage(p.Code, p.SubCode, nil)
-	data, err := msg.Serialize()
+	data, err := param.(NotificationMessageParameter).Serialize()
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
@@ -254,13 +258,18 @@ func sendBGPKeepaliveMessage(conn *net.Conn) {
 
 func sendBGPRouteRefreshMessage(conn *net.Conn, param ParameterInterface) {
 	log.Printf("send BGP RouteRefresh Message")
-	p := param.(RouterefreshMessageParameter)
-	msg := bgp.NewBGPRouteRefreshMessage(p.AFI, 0, p.SAFI)
-	data, err := msg.Serialize()
+	data, err := param.(RouterefreshMessageParameter).Serialize()
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
 	(*conn).Write(data)
+}
+
+func convertIPfromStringToIPAddrPrefix(ip string) *bgp.IPAddrPrefix {
+	addr := strings.Split(ip, "/")[0]
+	len, _ := strconv.ParseUint(strings.Split(ip, "/")[1], 10, 8)
+	ipap := bgp.NewIPAddrPrefix(uint8(len), addr)
+	return ipap
 }
 
 func sleep(param ParameterInterface) {
@@ -280,7 +289,11 @@ func processSteps(peer PeerInfo, local LocalInfo, steps []Step, bgpMsgCh chan *b
 		case OPERATION_CLOSE:
 			close(conn)
 		case OPERATION_SEND_BGP_OPEN:
-			sendBGPOpenMessage(conn, local, v.Parameter)
+			vv := v.Parameter.(OpenMessageParameter)
+			vv.AS = local.AS
+			vv.ID = local.ID
+			vv.Holdtime = local.Holdtime
+			sendBGPOpenMessage(conn, vv)
 		case OPERATION_SEND_BGP_UPDATE:
 			sendBGPUpdateMessage(conn, v.Parameter)
 		case OPERATION_SEND_BGP_NOTIFICATION:
