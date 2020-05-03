@@ -56,9 +56,10 @@ func parseGlobal(config *Config) (PeerInfo, LocalInfo) {
 	return peer, local
 }
 
-func parseScenario(config *Config) []Step {
+func parseScenario(sc []StepConfig) []Step {
 	var steps []Step
-	for _, v := range config.Scenario {
+	for _, v := range sc {
+		// TODO: extract common codes and remove them to other function
 		switch v.Operation {
 		case OPERATION_CONNECT:
 			s := Step{
@@ -150,6 +151,30 @@ func parseScenario(config *Config) []Step {
 			s := Step{
 				Operation: OPERATION_RECEIVE_BGP_ROUTEREFRESH,
 				Parameter: nil,
+			}
+			steps = append(steps, s)
+		case OPERATION_RECEIVE_NOTHING:
+			var p NothingParameter
+			err := mapstructure.Decode(v.Parameter, &p)
+			if err != nil {
+				log.Fatalf("error: %v", err)
+			}
+			s := Step{
+				Operation: OPERATION_RECEIVE_NOTHING,
+				Parameter: p,
+			}
+			steps = append(steps, s)
+		case OPERATION_RECEIVE_ONE_OF_THEM:
+			var p BundledStepsParameter
+			err := mapstructure.Decode(v.Parameter, &p)
+			if err != nil {
+				log.Fatalf("error: %v", err)
+			}
+
+			pp := parseScenario(p.Steps)
+			s := Step{
+				Operation: OPERATION_RECEIVE_ONE_OF_THEM,
+				Parameter: ReceiveOneOfThemParameter(pp),
 			}
 			steps = append(steps, s)
 		case OPERATION_SLEEP:
