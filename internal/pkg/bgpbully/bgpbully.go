@@ -27,6 +27,7 @@ const (
 	OPERATION_SEND_BGP_NOTIFICATION    = "send_bgp_notification"
 	OPERATION_SEND_BGP_KEEPALIVE       = "send_bgp_keepalive"
 	OPERATION_SEND_BGP_ROUTEREFRESH    = "send_bgp_routerefresh"
+	OPERATION_SEND_BGP_RAW             = "send_bgp_raw"
 	OPERATION_RECEIVE_BGP_OPEN         = "receive_bgp_open"
 	OPERATION_RECEIVE_BGP_UPDATE       = "receive_bgp_update"
 	OPERATION_RECEIVE_BGP_NOTIFICATION = "receive_bgp_notification"
@@ -169,6 +170,18 @@ func (p RouterefreshMessageParameter) Serialize() ([]byte, error) {
 	return data, err
 }
 
+type RawMessageParameter struct {
+	Value string `mapstructure:"value"`
+}
+
+func (p RawMessageParameter) Serialize() ([]byte, error) {
+	data, err := hex.DecodeString(p.Value)
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	return data, err
+}
+
 type SleepParameter struct {
 	Duration time.Duration `mapstructure:"sec"`
 }
@@ -278,6 +291,15 @@ func sendBGPKeepaliveMessage(conn *net.Conn) {
 func sendBGPRouteRefreshMessage(conn *net.Conn, param ParameterInterface) {
 	log.Printf("send BGP RouteRefresh Message")
 	data, err := param.(RouterefreshMessageParameter).Serialize()
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	(*conn).Write(data)
+}
+
+func sendBGPRawMessage(conn *net.Conn, param ParameterInterface) {
+	log.Printf("send BGP Raw Message")
+	data, err := param.(RawMessageParameter).Serialize()
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
@@ -405,6 +427,8 @@ func processSteps(peer PeerInfo, local LocalInfo, steps []Step, closeCh chan str
 			sendBGPKeepaliveMessage(conn)
 		case OPERATION_SEND_BGP_ROUTEREFRESH:
 			sendBGPRouteRefreshMessage(conn, v.Parameter)
+		case OPERATION_SEND_BGP_RAW:
+			sendBGPRawMessage(conn, v.Parameter)
 		case OPERATION_RECEIVE_BGP_OPEN:
 			m := receiveBGPMessage(DEFAULT_WAIT_TIME)
 			matchBGPMessageExpected(m, bgp.BGP_MSG_OPEN)

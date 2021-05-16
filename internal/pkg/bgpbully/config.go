@@ -123,6 +123,17 @@ func parseScenario(sc []StepConfig) []Step {
 				Parameter: p,
 			}
 			steps = append(steps, s)
+		case OPERATION_SEND_BGP_RAW:
+			var p RawMessageParameter
+			err := mapstructure.Decode(v.Parameter, &p)
+			if err != nil {
+				log.Fatalf("error: %v", err)
+			}
+			s := Step{
+				Operation: OPERATION_SEND_BGP_RAW,
+				Parameter: p,
+			}
+			steps = append(steps, s)
 		case OPERATION_RECEIVE_BGP_OPEN:
 			s := Step{
 				Operation: OPERATION_RECEIVE_BGP_OPEN,
